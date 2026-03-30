@@ -1,0 +1,16 @@
+{
+  "name": "roundtable",
+  "owner": {
+    "name": "Zhijiang Li"
+  },
+  "plugins": [
+    {
+      "name": "roundtable",
+      "source": {
+        "source": "self"
+      },
+      "description": "Adversarial multi-agent discussion plugin",
+      "version": "1.0.0"
+    }
+  ]
+}
