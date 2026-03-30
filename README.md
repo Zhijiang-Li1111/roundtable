@@ -44,9 +44,9 @@ The skill activates when you say things like:
 
 | Decision | Rationale |
 |----------|-----------|
-| Subagent mode (not Team Mode) | ~3x cheaper token cost, full control over discussion flow |
+| Subagent mode (not Team Mode) | Full control over discussion flow, genuine perspective isolation via fresh context per round |
 | Independent context per debater | Same-context role-play produces fake diversity due to attention mechanism blending |
-| Max 4 rounds | Beyond 4, arguments repeat rather than deepen |
+| Pressure-driven convergence | Discussion ends when positions converge under adversarial pressure or are clearly irreconcilable; 4 rounds is a safety cap, not a target |
 | Moderator recap each round | Mitigates context drift in multi-turn discussions |
 | Convergence monitoring | Same-model agents share training biases; flags suspiciously fast agreement |
 | Zero custom tools | Claude Code built-in tools (Read, Grep, Agent) suffice |

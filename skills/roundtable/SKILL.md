@@ -17,17 +17,17 @@ Read the user's topic. Classify into one of three scenario types:
 - **Architecture/Design Risk Assessment** — solution not yet built, need to expose risks before committing
 - **Technical Decision Analysis** — choose between approaches with full consideration of trade-offs
 
-If the scenario doesn't fit cleanly, pick the closest match. Tell the user which type was selected and why.
+If the scenario doesn't fit cleanly, default to Technical Decision Analysis — it has the most flexible role set. Tell the user which type was selected and why.
 
 ### 2. Select debater roles
 
-Each scenario type has a default 3-role combination. Start with the default and add the 4th role when the topic has enough complexity to warrant it:
+Each scenario type has a recommended 3-role combination. Start with these defaults and consider a 4th role when the topic warrants it:
 
-**Bug Root Cause Analysis** — default: Symptom Skeptic, System Thinker, History Detective. Add Devil's Advocate when the obvious explanation is too convenient.
+**Bug Root Cause Analysis** — default: Symptom Skeptic, System Thinker, History Detective. Consider adding Devil's Advocate if the obvious explanation seems too convenient — the goal is to force deeper investigation.
 
-**Architecture/Design Risk Assessment** — default: Pessimist, Scale Challenger, Simplicity Advocate. Add Integration Realist when the design touches multiple existing systems.
+**Architecture/Design Risk Assessment** — default: Pessimist, Scale Challenger, Simplicity Advocate. Consider adding Integration Realist if the design touches multiple existing systems — integration friction is often underestimated.
 
-**Technical Decision Analysis** — default: Advocate A, Advocate B, Cross-Examiner. Add Long-Term Thinker when the decision has significant lock-in effects.
+**Technical Decision Analysis** — default: Advocate A, Advocate B, Cross-Examiner. Consider adding Long-Term Thinker if the decision has significant lock-in effects — short-term wins can mask long-term regret.
 
 Present the selection to the user:
 
@@ -44,18 +44,19 @@ Wait for user confirmation before proceeding. If the user wants a custom role, a
 Spawn all debaters in parallel using the Agent tool — one independent subagent call per debater. Each debater gets its own prompt:
 
 ```
-You are {role_name} in an adversarial roundtable discussion.
+You are {role_name}, one of {n} debaters in an adversarial roundtable discussion. {n-1} other debaters with conflicting mandates will read and challenge your arguments.
 
 Perspective: {perspective}
+Mandate: {mandate}
 
-Principles:
-- Commit fully to your mandate: {mandate}. The roundtable only works when each participant holds their ground — otherwise it degenerates into groupthink.
-- Support every claim with evidence from the codebase — cite specific files, line numbers, code patterns, git history. Unsupported assertions are easy to dismiss and won't advance the discussion.
+You have access to code exploration tools (Read, Grep, Glob) to find evidence in the codebase. Use them — do not cite files or line numbers from memory. Every claim should be backed by evidence you have verified.
+
+The discussion benefits from genuine disagreement. If you find yourself agreeing with the likely positions of other debaters, look harder for counter-evidence.
 
 Topic: {topic}
 Context: {context}
 
-Argue your position on this topic from your assigned perspective. Keep your response focused and under 800 words — this forces you to prioritize your strongest arguments.
+Argue your position. Keep your response under 800 words.
 ```
 
 After collecting all responses, perform a per-round check (see checklist below). Then present responses to the user, clearly labeled by role.
@@ -65,14 +66,14 @@ After collecting all responses, perform a per-round check (see checklist below).
 For each subsequent round, spawn all debaters again in parallel as fresh subagents. Use this rebuttal prompt:
 
 ```
-You are {role_name} in Round {n} of an adversarial roundtable discussion.
+You are {role_name} in Round {n} of an adversarial roundtable discussion. {n-1} other debaters with conflicting mandates are challenging your position.
 
 Perspective: {perspective}
+Mandate: {mandate}
 
-Principles:
-- Commit fully to your mandate: {mandate}.
-- Concede when the evidence genuinely compels you, but push back if you have counter-evidence or doubt.
-- Cite code/files for every claim.
+You have access to code exploration tools (Read, Grep, Glob). Use them to verify claims and find new evidence. Do not cite files from memory.
+
+Concede when the evidence genuinely compels you, but push back if you have counter-evidence or doubt.
 
 ## Discussion State
 - Round: {n}
@@ -88,11 +89,25 @@ Rebut the points you disagree with. Introduce new evidence from the codebase if 
 
 The Discussion State recap at the top of each prompt helps debaters stay oriented as rounds accumulate — without it, later rounds tend to repeat earlier points or lose track of what's already been resolved.
 
+Example of a well-written Discussion State:
+```
+- Current consensus: (1) The timeout is caused by the retry loop in api_client.py:142, not by network latency. (2) The fix should be at the caller level.
+- Active disputes: Whether the retry count should be configurable or hardcoded.
+- Focus: Pessimist claims configurability adds operational risk — Scale Challenger, respond with evidence.
+```
+
 After collecting responses, perform the per-round check, then present to the user.
 
 ### 5. Monitor for convergence
 
-Same-model agents share training biases and tend toward premature agreement. When consensus forms quickly without rigorous evidence-based challenge, it's worth questioning whether it reflects genuine agreement or shared blind spots.
+The goal of roundtable is not to run a fixed number of rounds — it is to apply adversarial pressure until positions either converge to defensible conclusions or are clearly irreconcilable. The moderator should end the discussion when:
+
+- Debaters have been forced to concede weak points and the remaining positions are evidence-backed and tested under pressure — this is **genuine convergence**, the ideal outcome.
+- Positions have stabilized with clear, well-evidenced disagreements that further rounds won't resolve — proceed to conclusion with disagreements marked.
+
+If all debaters reach consensus in Round 1 without genuine adversarial pressure, this is almost certainly premature — trigger a convergence warning and run at least Round 2 as a pressure test before accepting it.
+
+Same-model agents share training biases and tend toward premature agreement. When consensus forms quickly without evidence-based challenge:
 
 Flag suspicious consensus for the user:
 
@@ -114,7 +129,7 @@ If the user says "enough", "stop", "wrap up" — immediately proceed to the conc
 
 ### 7. Generate conclusion report
 
-After the final round (or when the user stops), compile a structured report:
+After the final round (or when the user stops), compile a structured report. Adapt the sections to what the discussion actually produced — not every discussion needs every section. The default structure:
 
 ```markdown
 ## Roundtable Conclusion: [Topic]
@@ -139,22 +154,25 @@ After the final round (or when the user stops), compile a structured report:
 - [file:line] — cited by [Role] to support [point]
 ```
 
+For Bug Root Cause Analysis, "Risks Identified" may be less relevant — replace with root cause and verification plan. For Technical Decision Analysis, "Recommended Actions" might be a clear recommendation or an honest "needs more data." Let the discussion content drive the report structure.
+
 ## Per-Round Checklist
 
 After collecting each round's debater responses, verify before presenting to the user:
 
 - All debaters responded (no silent subagent failures)
 - Each response cites at least one specific file or line number
+- Spot-check at least one code citation per debater — verify the file and line number actually exist. Debaters sometimes fabricate evidence.
 - Each response stays within its assigned mandate — a Pessimist finding failure modes, not praising the design; a Symptom Skeptic questioning obvious answers, not accepting them
 - Round summary accurately reflects the key disagreements
 
-If a debater's response lacks code citations or drifts from its mandate, re-spawn that debater with an additional reminder of the requirements. Allow one retry per debater per round — if it still drifts, flag it to the user as a signal that the perspective may not be strongly defensible for this topic.
+If a debater fabricates evidence, lacks citations, or drifts from its mandate, re-spawn that debater with a reminder. Allow one retry per debater per round — if it still fails, flag it to the user.
 
 ## Gotchas
 
-- **Fabricated evidence.** Debaters sometimes cite files or line numbers that don't exist. After Round 1, spot-check at least one code citation per debater. If a debater fabricated evidence, note it in the round summary and instruct it to provide real evidence in the next round.
+- **Fabricated evidence.** Debaters sometimes cite files or line numbers that don't exist. The per-round checklist includes spot-checking — enforce it. The debater prompts now instruct agents to use tools (Read, Grep, Glob) to verify before citing, which reduces but does not eliminate this risk.
 - **Role drift.** A common failure: the Pessimist starts offering solutions instead of finding failure modes, or the Devil's Advocate agrees with the majority. The per-round checklist catches this — enforce it.
-- **Summary distortion.** When forwarding arguments to the next round, forward them verbatim. Paraphrasing systematically weakens adversarial positions and creates false consensus. The raw tension is the point.
+- **Summary distortion.** When forwarding the previous round's arguments to the next round, forward them verbatim. Do not paraphrase — paraphrasing systematically weakens adversarial positions and creates false consensus. The raw tension is the point. (Note: only the immediately previous round's arguments are forwarded verbatim; earlier rounds are represented through the Discussion State recap.)
 
 ## Role Library
 
@@ -181,7 +199,7 @@ If a debater's response lacks code citations or drifts from its mandate, re-spaw
 
 ## Constraints
 
-- Maximum 4 rounds. Beyond 4, arguments tend to repeat rather than deepen — diminishing returns. If no convergence, proceed to conclusion with disagreements clearly marked.
+- Termination criteria: see Section 5. 4 rounds is a safety cap (beyond 4, arguments tend to repeat), not a target. Most discussions converge in 2-3 rounds if the pressure is real.
 - Each debater is an independent subagent (separate context window). Same-context role-play produces surface-level diversity rather than genuine perspective differences, because the model's attention mechanism blends the viewpoints.
-- Forward debater arguments verbatim between rounds. Paraphrasing weakens adversarial tension and leads to premature consensus (see Gotchas).
+- Forward the previous round's debater arguments verbatim into the next round's prompts. Earlier rounds are captured through the Discussion State recap (consensus/disputes), not re-forwarded in full. This balances adversarial tension with token efficiency (see Gotchas).
 - When a debater says "I don't have enough information to argue this point", pause and ask the user for that information before continuing.

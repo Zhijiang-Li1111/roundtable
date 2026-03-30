@@ -26,11 +26,11 @@ The entire plugin is a single skill file. The moderator (Claude Code's main agen
 
 ## Key Design Decisions
 
-- **Subagent mode only** (no Team Mode) — lower token cost (~3x cheaper), full control over discussion flow, no platform stability risk.
+- **Subagent mode only** (no Team Mode) — full control over discussion flow, fresh context window per debater per round ensures genuine perspective isolation, no platform stability risk from newer APIs.
 - **Zero custom tools** — all operations use Claude Code built-in tools (Read, Grep, Agent, etc.).
-- **Max 4 rounds** — keeps total token consumption (~30-35K) well within context window limits and avoids multi-turn performance degradation.
+- **Pressure-driven convergence** — the goal is not to run N rounds, but to force debaters through adversarial pressure until only defensible conclusions survive. Moderator ends the discussion (with user confirmation each round) when positions have been tested and either converged or clearly irreconcilable — not when a round counter expires. 4 rounds is a safety cap, not a target.
 - **Moderator recap each round** — structured summary of consensus/disputes at top of each debater prompt mitigates context drift.
-- **Convergence monitoring** — same-model agents share training biases and tend toward premature agreement; moderator flags suspiciously fast consensus.
+- **Convergence monitoring** — same-model agents share training biases and tend toward premature agreement; moderator flags suspiciously fast consensus. Genuine convergence (positions tested under pressure and found defensible) is the signal to conclude.
 
 ## Integration
 
