@@ -41,7 +41,11 @@ Wait for user confirmation before proceeding. If the user wants a custom role, a
 
 ### 3. Run Round 1 — Initial positions
 
-Spawn all debaters in parallel using the Agent tool — one independent subagent call per debater. Each debater gets its own prompt:
+Before spawning debaters, the moderator verifies ground truth. The principle: **verify existence before analyzing causality** — agents who start from unverified assumptions will search in the wrong direction and converge on the wrong answer. Extract the key entities from the topic (selectors, API endpoints, modules, config keys, interfaces) and verify in the current codebase that they still exist and behave as expected. If an entity is missing or has been replaced, search by structural role ("what renders this component now?") rather than by old name. Include verified facts in the Context field, clearly separated from unverified claims.
+
+When constructing the Topic and Context fields, present raw facts in chronological order — do not label anything as "primary cause", "root cause", or "secondary symptom". The moderator's framing leaks into every agent's reasoning.
+
+Each debater gets its own prompt:
 
 ```
 You are {role_name}, one of {n} debaters in an adversarial roundtable discussion. {n-1} other debaters with conflicting mandates will read and challenge your arguments.
@@ -50,6 +54,8 @@ Perspective: {perspective}
 Mandate: {mandate}
 
 You have access to code exploration tools (Read, Grep, Glob) to find evidence in the codebase. Use them — do not cite files or line numbers from memory. Every claim should be backed by evidence you have verified.
+
+Before theorizing about WHY something fails or is risky, first verify that your assumptions about WHAT EXISTS are true in the current codebase. Error messages tell you where a failure stopped, not why it happened — the cause may be upstream.
 
 The discussion benefits from genuine disagreement. If you find yourself agreeing with the likely positions of other debaters, look harder for counter-evidence.
 
@@ -72,6 +78,8 @@ Perspective: {perspective}
 Mandate: {mandate}
 
 You have access to code exploration tools (Read, Grep, Glob). Use them to verify claims and find new evidence. Do not cite files from memory.
+
+Before theorizing about WHY something fails or is risky, first verify that your assumptions about WHAT EXISTS are true in the current codebase.
 
 Concede when the evidence genuinely compels you, but push back if you have counter-evidence or doubt.
 
@@ -164,6 +172,8 @@ After collecting each round's debater responses, verify before presenting to the
 - Each response cites at least one specific file or line number
 - Spot-check at least one code citation per debater — verify the file and line number actually exist. Debaters sometimes fabricate evidence.
 - Each response stays within its assigned mandate — a Pessimist finding failure modes, not praising the design; a Symptom Skeptic questioning obvious answers, not accepting them
+- At least one agent searched current product/source code (not just test code or logs)
+- If all agents anchor on the same explanation, flag it and push for alternatives in the next round
 - Round summary accurately reflects the key disagreements
 
 If a debater fabricates evidence, lacks citations, or drifts from its mandate, re-spawn that debater with a reminder. Allow one retry per debater per round — if it still fails, flag it to the user.
@@ -173,6 +183,7 @@ If a debater fabricates evidence, lacks citations, or drifts from its mandate, r
 - **Fabricated evidence.** Debaters sometimes cite files or line numbers that don't exist. The per-round checklist includes spot-checking — enforce it. The debater prompts now instruct agents to use tools (Read, Grep, Glob) to verify before citing, which reduces but does not eliminate this risk.
 - **Role drift.** A common failure: the Pessimist starts offering solutions instead of finding failure modes, or the Devil's Advocate agrees with the majority. The per-round checklist catches this — enforce it.
 - **Summary distortion.** When forwarding the previous round's arguments to the next round, forward them verbatim. Do not paraphrase — paraphrasing systematically weakens adversarial positions and creates false consensus. The raw tension is the point. (Note: only the immediately previous round's arguments are forwarded verbatim; earlier rounds are represented through the Discussion State recap.)
+- **Lexical archaeology trap.** Agents default to grepping keywords from the error message or problem description. This only finds things with lexical overlap — a replacement (new layout, renamed API, refactored module) has zero overlap with the old name and will never be found this way. The observation phase and Ground Truth Investigator role exist to counter this, but watch for it in all agents.
 
 ## Role Library
 
@@ -182,6 +193,7 @@ If a debater fabricates evidence, lacks citations, or drifts from its mandate, r
 - **System Thinker** — Mandate: find hidden coupling — interactions, race conditions, state dependencies. "What else touches this code path?"
 - **History Detective** — Mandate: find the trigger via git history, recent changes, past incidents. "What changed recently that could cause this?"
 - **Devil's Advocate** — Mandate: force consideration of unlikely causes. "What if it's actually a data problem, not a code problem?"
+- **Ground Truth Investigator** — Mandate: ignore the error message, start from the current product code. "Does this selector/API/module still exist? If not, what replaced it?" Searches by structural role, not by string identity.
 
 ### Architecture/Design Risk Assessment
 
